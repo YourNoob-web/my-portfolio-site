@@ -6,5 +6,6 @@ phases:
       - echo "No build needed for static site"
 
 artifacts:
+  base-directory: build
   files:
     - '**/*'
