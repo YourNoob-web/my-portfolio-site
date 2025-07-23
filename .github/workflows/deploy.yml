@@ -37,6 +37,11 @@ jobs:
           unzip awscliv2.zip
           sudo ./aws/install --update
           aws --version
+      - name: Prepare build folder
+        run: |
+          mkdir -p build
+          cp index.html style.css build/
+
 
       - name: Sync to S3 bucket (if build folder exists)
         env:
