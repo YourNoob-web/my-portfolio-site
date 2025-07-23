@@ -36,15 +36,12 @@ jobs:
       - name: Install AWS CLI
         run: |
           sudo apt-get update
-          sudo apt-get install -y awscli
+          sudo apt-get install -y python3-pip
+          python3 -m pip install --upgrade awscli
 
       - name: Sync to S3 bucket
         env:
           AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          # if you have a build folder, sync it, otherwise cp individual files
           aws s3 sync ./build/ s3://tarun-portfolio-final-site/ --delete --region us-east-1
-          # example for individual files:
-          # aws s3 cp index.html s3://tarun-portfolio-final-site/ --region us-east-1
-          # aws s3 cp style.css  s3://tarun-portfolio-final-site/ --region us-east-1
