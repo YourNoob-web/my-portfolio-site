@@ -1,9 +1,10 @@
+# .github/workflows/deploy.yml
 name: Deploy to EC2
 
 on:
   push:
     branches:
-      - main  # or change this to your default branch
+      - main    # or whatever your default branch is
 
 jobs:
   deploy:
@@ -22,11 +23,18 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             cd ~/my-portfolio-site
-            git pull origin main
+
+            # 1) Sync with origin/main no matter what
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 2) Rebuild the Docker image
             docker build -t portfolio-site .
-            docker stop portfolio-container || true
-            docker rm portfolio-container || true
+
+            # 3) Kill any container binding port 80
+            docker ps -q --filter "publish=80" \
+              | xargs -r docker rm -f || true
+
+            # 4) Start fresh
             docker run -d --name portfolio-container -p 80:80 portfolio-site
           EOF
-
-
