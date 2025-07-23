@@ -40,7 +40,9 @@ jobs:
       - name: Prepare build folder
         run: |
           mkdir -p build
-          cp index.html style.css build/
+          cp index.html build/ || echo "index.html not found"
+          cp style.css build/ || echo "style.css not found"
+
 
 
       - name: Sync to S3 bucket (if build folder exists)
