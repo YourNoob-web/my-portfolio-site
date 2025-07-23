@@ -1,18 +1,37 @@
-- name: Deploy to EC2
-  run: |
-    ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-      cd ~/my-portfolio-site
+name: Deploy to EC2
 
-      # 1) Sync with origin/main
-      git fetch origin main
-      git reset --hard origin/main
+on:
+  push:
+    branches:
+      - main
 
-      # 2) Rebuild the Docker image
-      docker build -t portfolio-site .
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      # 3) Stop and remove old container if it exists
-      docker rm -f portfolio-container || true
+      - name: Add SSH key
+        run: |
+          echo "${{ secrets.EC2_KEY }}" > ec2_key.pem
+          chmod 600 ec2_key.pem
 
-      # 4) Start fresh
-      docker run -d --name portfolio-container -p 80:80 portfolio-site
-    EOF
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/my-portfolio-site
+
+            # 1) Sync with origin/main
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 2) Rebuild the Docker image
+            docker build -t portfolio-site .
+
+            # 3) Stop and remove old container if it exists
+            docker rm -f portfolio-container || true
+
+            # 4) Start fresh
+            docker run -d --name portfolio-container -p 80:80 portfolio-site
+          EOF
