@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 and S3
 
 on:
   push:
@@ -8,8 +8,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Add SSH key
@@ -21,17 +22,29 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             cd ~/my-portfolio-site
-
-            # 1) Sync with origin/main
             git fetch origin main
             git reset --hard origin/main
-
-            # 2) Rebuild the Docker image
             docker build -t portfolio-site .
-
-            # 3) Stop and remove old container if it exists
             docker rm -f portfolio-container || true
-
-            # 4) Start fresh
             docker run -d --name portfolio-container -p 80:80 portfolio-site
           EOF
+
+      # ────────────────────────────────────────────────────────
+      # New steps start here:
+      # ────────────────────────────────────────────────────────
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Sync to S3 bucket
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          # if you have a build folder, sync it, otherwise cp individual files
+          aws s3 sync ./build/ s3://tarun-portfolio-final-site/ --delete --region us-east-1
+          # example for individual files:
+          # aws s3 cp index.html s3://tarun-portfolio-final-site/ --region us-east-1
+          # aws s3 cp style.css  s3://tarun-portfolio-final-site/ --region us-east-1
