@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  id-token: write     # required for OIDC
+  id-token: write   # required for OIDC
   contents: read
 
 jobs:
@@ -17,46 +17,67 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Configure AWS creds via OIDC (uses the role Terraform created)
+      # --- keep your original SSH deploy to EC2 ---
+      - name: Add SSH key
+        run: |
+          echo "${{ secrets.EC2_KEY }}" > ec2_key.pem
+          chmod 600 ec2_key.pem
+
+      - name: Deploy to EC2 (SSH)
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/my-portfolio-site
+            git fetch origin main
+            git reset --hard origin/main
+            docker build -t portfolio-site .
+            docker rm -f portfolio-container || true
+            docker run -d --name portfolio-container -p 80:80 portfolio-site
+          EOF
+
+      # --- OIDC: short-lived AWS creds from the role Terraform created ---
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}  # set this secret to terraform output gha_role_arn
           aws-region: us-east-1
 
-      # Install AWS CLI (needed for aws s3 / ssm commands)
-      - name: Install AWS CLI
+      # --- Hardened AWS CLI install (retry + integrity check) ---
+      - name: Install AWS CLI (robust)
         run: |
-          sudo apt-get update
+          set -euo pipefail
+          sudo apt-get update -y
           sudo apt-get install -y unzip curl
-          curl "https://awscli.amazonaws.com/AWSCLIV2.zip" -o "awscliv2.zip"
-          unzip -q awscliv2.zip
+          URL="https://awscli.amazonaws.com/AWSCLIV2.zip"
+          ZIP="awscliv2.zip"
+          for i in 1 2 3 4 5; do
+            echo "Download attempt $i..."
+            rm -f "$ZIP"
+            curl -fL --retry 5 --retry-delay 2 "$URL" -o "$ZIP" && unzip -t "$ZIP" >/dev/null 2>&1 && break
+            echo "Download or integrity check failed; retrying in $((i*2))s..."
+            sleep $((i*2))
+          done
+          unzip -t "$ZIP" >/dev/null
+          rm -rf aws
+          unzip -q "$ZIP"
           sudo ./aws/install --update
           aws --version
 
-      # (Optional) build/copy your site into ./build — keep if you need it
+      # --- keep your original steps ---
+      - name: Pull latest main branch
+        run: |
+          git pull origin main
+
       - name: Prepare build folder
         run: |
           mkdir -p build
           cp index.html build/ || echo "index.html not found"
           cp style.css build/ || echo "style.css not found"
 
-      # Sync to S3 using the OIDC role (no access keys)
-      - name: Sync static site to S3
+      # --- S3 sync now uses the assumed role (no static keys) ---
+      - name: Sync to S3 bucket (OIDC creds)
         run: |
           if [ -d "./build" ]; then
             aws s3 sync ./build/ s3://tarun-portfolio-final-site/ --delete --region us-east-1
           else
             echo "⚠️ No ./build folder found. Skipping S3 sync."
           fi
-
-      # Restart the EC2 app via SSM instead of SSH
-      # Requires: enable_ssm_for_ec2=true in Terraform and SSM agent running on the instance
-      - name: Restart EC2 app via SSM
-        run: |
-          INSTANCE_ID=i-09358575c89badfe1
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "Key=instanceids,Values=$INSTANCE_ID" \
-            --parameters commands='docker rm -f portfolio-container || true; cd /opt/app && git pull && docker build -t portfolio-site . && docker run -d --restart=always --name portfolio-container -p 80:80 portfolio-site' \
-            --query "Command.CommandId" --output text
