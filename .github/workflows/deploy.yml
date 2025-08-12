@@ -41,13 +41,9 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}  # set this secret to terraform output gha_role_arn
           aws-region: us-east-1
       
-      # --- Hardened AWS CLI install (retry + integrity check) ---
-      - name: Setup AWS CLI
-        uses: aws-actions/setup-aws-cli@v3
-        with:
-          version: '2.x'
+     
 
-      # --- keep your original steps ---
+           # --- keep your original steps ---
       - name: Pull latest main branch
         run: |
           git pull origin main
@@ -61,6 +57,7 @@ jobs:
       # --- S3 sync now uses the assumed role (no static keys) ---
       - name: Sync to S3 bucket (OIDC creds)
         run: |
+          aws --version
           if [ -d "./build" ]; then
             aws s3 sync ./build/ s3://tarun-portfolio-final-site/ --delete --region us-east-1
           else
