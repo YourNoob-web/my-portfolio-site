@@ -42,25 +42,11 @@ jobs:
           aws-region: us-east-1
 
       # --- Hardened AWS CLI install (retry + integrity check) ---
-      - name: Install AWS CLI (robust)
-        run: |
-          set -euo pipefail
-          sudo apt-get update -y
-          sudo apt-get install -y unzip curl
-          URL="https://awscli.amazonaws.com/AWSCLIV2.zip"
-          ZIP="awscliv2.zip"
-          for i in 1 2 3 4 5; do
-            echo "Download attempt $i..."
-            rm -f "$ZIP"
-            curl -fL --retry 5 --retry-delay 2 "$URL" -o "$ZIP" && unzip -t "$ZIP" >/dev/null 2>&1 && break
-            echo "Download or integrity check failed; retrying in $((i*2))s..."
-            sleep $((i*2))
-          done
-          unzip -t "$ZIP" >/dev/null
-          rm -rf aws
-          unzip -q "$ZIP"
-          sudo ./aws/install --update
-          aws --version
+      - name: Setup AWS CLI
+  uses: aws-actions/setup-aws-cli@v2
+  with:
+    version: '2.x'
+
 
       # --- keep your original steps ---
       - name: Pull latest main branch
